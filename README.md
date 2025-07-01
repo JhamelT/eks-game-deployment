@@ -93,12 +93,15 @@ helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
 ### 5. Deploy the 2048 Game Application
 
 ```bash
-# Deploy the complete application stack
+# Deploy using the official AWS Load Balancer Controller example
 kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.5.4/docs/examples/2048/2048_full.yaml
 
 # Monitor deployment
 kubectl get pods -n game-2048 -w
 kubectl get ingress -n game-2048
+
+# Get the application URL (may take 2-3 minutes for ALB provisioning)
+kubectl get ingress ingress-2048 -n game-2048 -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
 ```
 
 ## 🔍 Verification & Testing
@@ -156,9 +159,16 @@ eksctl delete cluster --name demo-cluster
 - **Infrastructure as Code**: Using eksctl for reproducible deployments
 - **Monitoring & Troubleshooting**: kubectl commands and AWS console navigation
 
-## 🔗 Live Demo
+## 🔗 Tutorial Reference
 
-**Application URL:** [Your ALB URL here]
+This project follows the **Day 22 - AWS EKS** tutorial from [iam-veeramalla's aws-devops-zero-to-hero](https://github.com/iam-veeramalla/aws-devops-zero-to-hero/tree/main/day-22) repository.
+
+**Key Learning Path:**
+- EKS cluster creation with Fargate
+- AWS Load Balancer Controller setup
+- OIDC provider configuration
+- Ingress controller deployment
+- Real-world application deployment
 
 ## 📚 Additional Resources
 
