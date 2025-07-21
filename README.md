@@ -176,6 +176,6 @@ eksctl delete cluster --name demo-cluster
 This project builds upon the Day 22 - AWS EKS tutorial from [iam-veeramalla's aws-devops-zero-to-hero](https://github.com/iam-veeramalla/aws-devops-zero-to-hero/tree/main/day-22) repository, with additional analysis and improvements focused on real-world application.
 
 ## 📝 Additional Resources
-- [LESSONS_LEARNED.md](./LESSONS_LEARNED.md) - Detailed troubleshooting and insights
+- Lessons_Learned.md - Detailed troubleshooting and insights
 - [COST_ANALYSIS.md](./COST_ANALYSIS.md) - Fargate vs EC2 cost comparison
 - [architecture/DESIGN_DECISIONS.md](./architecture/DESIGN_DECISIONS.md) - Architecture rationale
