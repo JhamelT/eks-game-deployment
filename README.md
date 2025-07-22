@@ -115,7 +115,23 @@ kubectl get ingress -n game-2048
 # Get the application URL (may take 2-3 minutes for ALB provisioning)
 kubectl get ingress ingress-2048 -n game-2048 -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
 ```
+## 📋 Kubernetes Resources
 
+The application uses four main Kubernetes resources:
+
+- **Namespace:** Isolates the 2048 game from other workloads
+- **Deployment:** Manages 3 replicas of the containerized game
+- **Service:** Provides internal load balancing and service discovery
+- **Ingress:** Configures external access through AWS Load Balancer
+
+See [deployments/2048-game.yaml](./deployments/2048-game.yaml) for the complete manifest.
+
+### Key Configuration Choices:
+- **3 replicas:** Ensures high availability and load distribution
+- **NodePort service:** Required for ALB target-type: ip
+- **Internet-facing ALB:** Allows public access to the application
+
+- 
 ## 🔍 Monitoring & Verification
 ```bash
 # Check all components
