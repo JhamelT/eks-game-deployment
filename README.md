@@ -1,4 +1,8 @@
 # EKS Container Platform - Analytics to Cloud Engineering Journey
+![AWS](https://img.shields.io/badge/AWS-EKS-orange)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-1.32-blue)
+![Fargate](https://img.shields.io/badge/Compute-Fargate-green)
+![Status](https://img.shields.io/badge/Status-Learning%20Project-yellow)
 
 **Business Context:** Learning production-ready container orchestration to support scalable data processing workloads.
 
