@@ -181,5 +181,5 @@ This project builds upon the Day 22 - AWS EKS tutorial from [iam-veeramalla's aw
 
 ## 📝 Additional Resources
 - [Lessons_Learned.md](./Lessons_Learned.md) - Detailed troubleshooting and insights
-- [(./Cost_Analysis.md)](./Cost_Analysis.md) - Fargate vs EC2 cost comparison
+- [Cost_Analysis.md](./Cost_Analysis.md) - Fargate vs EC2 cost comparison
 - [architecture/DESIGN_DECISIONS.md](./architecture/DESIGN_DECISIONS.md) - Architecture rationale
