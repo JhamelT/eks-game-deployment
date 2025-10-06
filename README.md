@@ -1,4 +1,4 @@
-# EKS Container Platform - Analytics to Cloud Engineering Journey
+# EKS Container Platform
 ![AWS](https://img.shields.io/badge/AWS-EKS-orange)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-1.32-blue)
 ![Fargate](https://img.shields.io/badge/Compute-Fargate-green)
