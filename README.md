@@ -98,8 +98,6 @@ helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
   --set clusterName=demo-cluster \
   --set serviceAccount.create=false \
   --set serviceAccount.name=aws-load-balancer-controller \
-  --set region=<your-region> \
-  --set vpcId=<your-vpc-id>
 ```
 
 ### 5. Deploy Application
