@@ -1,0 +1,56 @@
+name: Deploy to EKS
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+    - 'k8s/**'
+
+env:
+  AWS_REGION: us-east-1
+  EKS_CLUSTER_NAME: demo-cluster
+
+# Use OIDC to assume an IAM role — no long-lived credentials stored as secrets
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to prod
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Configure AWS credentials via OIDC
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Update kubeconfig
+      run: |
+        aws eks update-kubeconfig \
+          --name ${{ env.EKS_CLUSTER_NAME }} \
+          --region ${{ env.AWS_REGION }}
+
+    - name: Install kustomize
+      uses: imranismail/setup-kustomize@v2
+
+    - name: Build prod manifests
+      run: kustomize build k8s/overlays/prod > /tmp/manifests.yaml
+
+    - name: Preview changes (kubectl diff)
+      # diff exits 1 when changes exist — that is expected, not a failure
+      run: kubectl diff -f /tmp/manifests.yaml || true
+
+    - name: Apply manifests
+      run: kubectl apply -f /tmp/manifests.yaml
+
+    - name: Verify rollout
+      run: |
+        kubectl rollout status deployment/deployment-2048 \
+          -n game-2048 \
+          --timeout=300s

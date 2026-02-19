@@ -1,201 +1,171 @@
-# EKS Container Platform
+# EKS 2048 Game Deployment
+
 ![AWS](https://img.shields.io/badge/AWS-EKS-orange)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-1.32-blue)
 ![Fargate](https://img.shields.io/badge/Compute-Fargate-green)
-![Status](https://img.shields.io/badge/Status-Learning%20Project-yellow)
 
-**Business Context:** Learning production-ready container orchestration to support scalable data processing workloads.
+Kubernetes deployment of the 2048 game on Amazon EKS with Fargate, demonstrating production-grade manifest practices and AWS ALB integration.
 
-A complete end-to-end deployment of a containerized application on Amazon EKS using Fargate, demonstrating modern cloud-native DevOps practices with focus on cost optimization and security.
+## Architecture
 
 ```
-Internet → ALB → EKS Fargate Pods → 2048 Game Application
+Internet → ALB (HTTPS) → EKS Fargate Pods (3 replicas, multi-AZ) → 2048 Game
 ```
 
-## 🎯 Project Goals
-- **Primary:** Master EKS networking, security, and serverless compute patterns
-- **Secondary:** Build foundation for deploying data analytics applications at scale
-- **Learning Focus:** Cost-optimized infrastructure for variable workloads (common in analytics)
+| Component | Technology |
+|-----------|------------|
+| Cluster | Amazon EKS 1.32, Fargate-only compute |
+| Load balancer | AWS ALB via Load Balancer Controller v2.11.0 |
+| Networking | VPC with public/private subnets across 2 AZs |
+| Security | OIDC/IRSA, pod security context, network policies |
+| Config management | Kustomize (base + dev/prod overlays) |
+| CI/CD | GitHub Actions (validate on PR, deploy on merge) |
 
-## 🧠 Key Learning Outcomes
-- **Fargate vs EC2 Trade-offs:** When to choose serverless containers vs managed nodes
-- **AWS Integration Patterns:** How Load Balancer Controller integrates with Kubernetes ingress
-- **Security Best Practices:** OIDC provider setup and IAM service account binding
-- **Cost Optimization:** Pay-per-use model evaluation for analytics workloads
+## Repository Structure
 
-## 🏗️ Architecture Overview
+```
+k8s/
+├── base/                  # Shared manifests
+│   ├── kustomization.yaml
+│   ├── namespace.yaml
+│   ├── deployment.yaml    # Resources, probes, securityContext, topology spread
+│   ├── service.yaml
+│   ├── ingress.yaml       # HTTP base; HTTPS added in prod overlay
+│   ├── hpa.yaml           # CPU/memory autoscaling, min 2 / max 10
+│   ├── pdb.yaml           # minAvailable: 2
+│   └── networkpolicy.yaml # Ingress on :80, egress DNS only
+└── overlays/
+    ├── dev/               # 2 replicas, relaxed HPA/PDB, no TLS
+    └── prod/              # HTTPS with ACM cert, HTTP→HTTPS redirect
+.github/workflows/
+├── validate.yaml          # PR: kustomize build, kubeconform, trivy, checkov
+└── deploy.yaml            # main push: diff → apply → rollout verify
+Architecture/
+└── Design_Decisions.md
+```
 
-### Key Components:
-- **Container Orchestration:** Amazon EKS (Kubernetes 1.32)
-- **Compute:** AWS Fargate (Serverless containers)
-- **Load Balancing:** AWS Application Load Balancer
-- **Infrastructure Management:** eksctl, kubectl
-- **Package Management:** Helm
-- **Networking:** VPC with public/private subnets
-- **Security:** IAM roles, OIDC provider, Service Accounts
+## Prerequisites
 
-### Infrastructure Design:
-- **Networking:** VPC with public and private subnets across 2 AZs
-- **Security:** IAM roles with least privilege access, OIDC authentication
-- **Compute:** Fargate profiles for serverless container execution
-- **Cost Optimization:** No EC2 instances to manage, pay-per-use model
+| Tool | Version |
+|------|---------|
+| AWS CLI | >= 2.x |
+| kubectl | >= 1.32 |
+| eksctl | >= 0.191 |
+| kustomize | >= 5.x |
+| Helm | >= 3.x |
 
-## 📋 Prerequisites
-- AWS CLI configured with appropriate permissions
-- kubectl installed
-- eksctl installed
-- Helm installed
-- Docker understanding (for containerization concepts)
+Required IAM permissions: EKS full access, IAM role creation, VPC management, EC2/ALB management.
 
-## 🚀 Deployment Steps
+## Initial Cluster Setup
 
-### 1. Create EKS Cluster with Fargate
+Run once to provision the EKS cluster and supporting infrastructure.
+
 ```bash
-# Create cluster with Fargate profile
+# 1. Create cluster with Fargate
 eksctl create cluster --name demo-cluster --region us-east-1 --fargate
 
-# Verify cluster creation
-kubectl get nodes
-eksctl get cluster
-```
-
-### 2. Configure Fargate Profile
-```bash
-# Create namespace-specific Fargate profile
+# 2. Create Fargate profile scoped to the app namespace
 eksctl create fargateprofile \
   --cluster demo-cluster \
   --region us-east-1 \
   --name alb-sample-app \
   --namespace game-2048
-```
 
-### 3. Setup AWS Load Balancer Controller
-```bash
-# Associate IAM OIDC provider for service accounts
+# 3. Associate OIDC provider (required for IRSA)
 eksctl utils associate-iam-oidc-provider --cluster demo-cluster --approve
 
-# Download and create IAM policy
+# 4. Create ALB controller IAM policy
 curl -O https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.11.0/docs/install/iam_policy.json
-aws iam create-policy --policy-name AWSLoadBalancerControllerIAMPolicy --policy-document file://iam_policy.json
+aws iam create-policy \
+  --policy-name AWSLoadBalancerControllerIAMPolicy \
+  --policy-document file://iam_policy.json
 
-# Create service account with IAM role
+# 5. Bind IAM role to the controller service account
 eksctl create iamserviceaccount \
   --cluster=demo-cluster \
   --namespace=kube-system \
   --name=aws-load-balancer-controller \
   --role-name=AmazonEKSLoadBalancerControllerRole \
-  --attach-policy-arn=arn:aws:iam::<ACCOUNT-ID>:policy/AWSLoadBalancerControllerIAMPolicy \
+  --attach-policy-arn=arn:aws:iam::<ACCOUNT_ID>:policy/AWSLoadBalancerControllerIAMPolicy \
   --approve
-```
 
-### 4. Install Load Balancer Controller via Helm
-```bash
-# Install controller via Helm
-helm repo add eks https://aws.github.io/eks-charts
-helm repo update
+# 6. Install ALB controller via Helm
+helm repo add eks https://aws.github.io/eks-charts && helm repo update
 helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
   -n kube-system \
   --set clusterName=demo-cluster \
   --set serviceAccount.create=false \
-  --set serviceAccount.name=aws-load-balancer-controller 
+  --set serviceAccount.name=aws-load-balancer-controller
 ```
 
-### 5. Deploy Application
-```bash
-# Deploy using the official AWS Load Balancer Controller example
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.5.4/docs/examples/2048/2048_full.yaml
+## Deploying the Application
 
-# Monitor deployment
-kubectl get pods -n game-2048 -w
-kubectl get ingress -n game-2048
+**Before deploying to prod**, update the ACM certificate ARN in `k8s/overlays/prod/ingress-patch.yaml`:
+```yaml
+alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:REGION:ACCOUNT_ID:certificate/CERT_ID
 ```
 
-### 6. Access Application
+**Dev (manual):**
 ```bash
-# Get the application URL (may take 2-3 minutes for ALB provisioning)
-kubectl get ingress ingress-2048 -n game-2048 -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+kustomize build k8s/overlays/dev | kubectl apply -f -
+kubectl rollout status deployment/deployment-2048 -n game-2048
 ```
-## 📋 Kubernetes Resources
 
-The application uses four main Kubernetes resources:
+**Prod (automated):** Push to `main` — the `deploy.yaml` workflow runs `kubectl diff`, applies, and verifies rollout.
 
-- **Namespace:** Isolates the 2048 game from other workloads
-- **Deployment:** Manages 3 replicas of the containerized game
-- **Service:** Provides internal load balancing and service discovery
-- **Ingress:** Configures external access through AWS Load Balancer
-
-See [deployments/2048-game.yaml](./deployments/2048-game.yaml) for the complete manifest.
-
-### Key Configuration Choices:
-- **3 replicas:** Ensures high availability and load distribution
-- **NodePort service:** Required for ALB target-type: ip
-- **Internet-facing ALB:** Allows public access to the application
-
-- 
-## 🔍 Monitoring & Verification
+**Get the application URL:**
 ```bash
-# Check all components
+kubectl get ingress ingress-2048 -n game-2048 \
+  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+```
+ALB provisioning takes 2-3 minutes after first apply.
+
+## CI/CD
+
+| Workflow | Trigger | Steps |
+|----------|---------|-------|
+| `validate.yaml` | PR to `main` | kustomize build (dev+prod), kubeconform schema check, trivy image scan, checkov policy |
+| `deploy.yaml` | Push to `main` | AWS OIDC auth, kubeconfig update, kubectl diff, kubectl apply, rollout verify |
+
+**Required GitHub secrets:**
+
+| Secret | Description |
+|--------|-------------|
+| `AWS_DEPLOY_ROLE_ARN` | IAM role ARN with EKS deploy permissions. Trust policy must allow `token.actions.githubusercontent.com` as the OIDC provider. |
+
+## Rollback
+
+```bash
+kubectl rollout undo deployment/deployment-2048 -n game-2048
+kubectl rollout status deployment/deployment-2048 -n game-2048
+```
+
+## Verification
+
+```bash
 kubectl get all -n game-2048
-kubectl get ingress -n game-2048
+kubectl get ingress ingress-2048 -n game-2048
 kubectl describe ingress ingress-2048 -n game-2048
-
-# Get application URL
-kubectl get ingress ingress-2048 -n game-2048 -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+kubectl top pods -n game-2048
 ```
 
-## 📊 Analytics Background Context
-This project bridges my data analytics experience with cloud engineering:
+## Cleanup
 
-**Why This Matters for Data Teams:**
-- **Scalable Processing:** Container orchestration handles variable analytics workloads
-- **Cost Control:** Fargate eliminates idle compute costs common in data projects
-- **Security:** IAM integration supports data governance requirements
-- **Monitoring Ready:** Foundation for observability in data pipelines
-
-## 🔧 Troubleshooting Guide
-Common issues I encountered and solutions:
-
-1. **Pods Stuck Pending:** Check Fargate profile namespace matching
-2. **ALB Not Created:** Verify Load Balancer Controller installation
-3. **Access Denied:** Confirm OIDC provider and IAM policy attachment
-4. **Long Provisioning Time:** ALB creation takes 2-3 minutes - be patient
-
-## 💰 Cost Considerations
-- **Fargate:** Pay only for vCPU and memory resources used
-- **No Idle EC2 Instances:** Fargate eliminates unused capacity costs
-- **ALB:** Pay per hour and per processed requests
-- **Auto-scaling:** Resources scale to zero when not in use
-
-See [Cost_Analysis.md](./Cost_Analysis.md) for detailed cost comparison with EC2 alternatives.
-
-## 🧹 Cleanup
 ```bash
-# Delete the application
-kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.5.4/docs/examples/2048/2048_full.yaml
-
-# Delete the cluster (this removes all resources)
+kubectl delete namespace game-2048
 eksctl delete cluster --name demo-cluster
 ```
 
-## 📚 Skills Demonstrated
-- **Container Orchestration:** Hands-on experience with Kubernetes on AWS
-- **Serverless Compute:** Understanding Fargate vs traditional EC2 node groups
-- **Cloud Networking:** VPC, subnets, load balancers, and ingress concepts
-- **Security Best Practices:** IAM roles, service accounts, and RBAC
-- **Infrastructure as Code:** Using eksctl for reproducible deployments
-- **Monitoring & Troubleshooting:** kubectl commands and AWS console navigation
+> Note: deleting the namespace removes all app resources. Deleting the cluster removes the ALB, Fargate profiles, and node IAM roles. The ACM certificate and IAM policies created during setup must be removed separately.
 
-## 🎯 Next Steps
-- [ ] Replace demo app with Flask data processing API
-- [ ] Add CloudWatch monitoring dashboard
-- [ ] Implement Terraform for infrastructure as code
-- [ ] Create CI/CD pipeline with GitHub Actions
-- [ ] Add resource limits and requests for production readiness
+## Known Limitations
 
-## 🙏 Acknowledgments
-This project builds upon the Day 22 - AWS EKS tutorial from [iam-veeramalla's aws-devops-zero-to-hero](https://github.com/iam-veeramalla/aws-devops-zero-to-hero/tree/main/day-22) repository, with additional analysis and improvements focused on real-world application.
+- Image tag is `latest` — pin to a digest once a versioning pipeline is in place.
+- `runAsNonRoot` is commented out in `deployment.yaml` — the upstream image runs nginx as root. Enable after rebuilding on `nginxinc/nginx-unprivileged` or equivalent.
+- Fargate cold start: 45-60 seconds. Total time from pod scheduled to LB ready: 90-120 seconds.
+- Topology spread requires at least 2 AZs with available Fargate capacity. If only one AZ is available, pods will not schedule (`whenUnsatisfiable: DoNotSchedule`).
 
-## 📝 Additional Resources
-- [Lessons_Learned.md](./Lessons_Learned.md) - Detailed troubleshooting and insights
-- [Cost_Analysis.md](./Cost_Analysis.md) - Fargate vs EC2 cost comparison
-- [Architecture/DESIGN_DECISIONS.md](./Architecture/Design_Decisions.md) - Architecture rationale
+## Additional Documentation
+
+- [Architecture/Design_Decisions.md](./Architecture/Design_Decisions.md) — rationale for Fargate, ALB, and OIDC choices
+- [Lessons_Learned.md](./Lessons_Learned.md) — post-mortem notes on provisioning delays and debugging
