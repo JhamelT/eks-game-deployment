@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: game-2048
+  name: ingress-2048
+  annotations:
+    # internet-facing: ALB is placed in public subnets, accessible from internet.
+    # internal: ALB is placed in private subnets, accessible only within VPC.
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    # target-type: ip is required for Fargate. Fargate pods do not run on EC2
+    # instances, so the ALB cannot use instance-mode targeting.
+    # ip mode routes directly to pod ENIs.
+    alb.ingress.kubernetes.io/target-type: ip
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: service-2048
+              port:
+                number: 80
