@@ -2,6 +2,39 @@
 
 ## 🚧 Challenges Encountered & Solutions
 
+### 0. Teardown Order (The Mistake That Costs Money)
+**Issue:** Running `eksctl delete cluster` immediately after finishing, only for it to hang or fail.
+**Root Cause:** The Application Load Balancer is a Kubernetes-managed resource. When the
+AWS Load Balancer Controller processes the Ingress, it creates a real ALB in AWS. That ALB
+is attached to VPC subnets. When you try to delete the cluster, AWS cannot delete the VPC
+while a load balancer is still attached to it — so the `eksctl` CloudFormation stack either
+hangs or fails with a dependency error.
+
+**Correct teardown order:**
+```bash
+# 1. Delete the Ingress — this triggers the controller to remove the ALB from AWS
+kubectl delete ingress ingress-2048 -n game-2048
+
+# 2. Wait for the ALB to be fully removed before proceeding
+kubectl wait --for=delete ingress/ingress-2048 -n game-2048 --timeout=300s
+
+# 3. Buffer for AWS to finish deregistering
+sleep 30
+
+# 4. NOW it is safe to delete the cluster
+eksctl delete cluster --name demo-cluster --region us-east-1
+```
+
+Or just run:
+```bash
+bash scripts/teardown.sh
+```
+
+**Lesson:** The cluster teardown is as important as the deployment. An EKS cluster left
+running costs ~$150+/month in background charges. Teardown is part of the project.
+
+---
+
 ### 1. Load Balancer Provisioning Delays
 **Issue:** ALB took 3+ minutes to become available after ingress creation
 **Root Cause:** AWS resource propagation time and DNS configuration
@@ -60,9 +93,19 @@ kubectl get pods -n game-2048 --show-labels
 ## 🧠 Key Technical Insights
 
 ### Container Networking in AWS
-- **Discovery:** Fargate networking is different from EC2 - each pod gets its own ENI
+- **Discovery:** Fargate networking is different from EC2 — each pod gets its own ENI
 - **Implication:** Different security group and network ACL considerations
 - **Future Application:** Important for high-throughput data processing applications
+
+### Fargate Persistent Volumes (EFS, not EBS)
+- **Clarification:** Fargate does support persistent volumes, but only via EFS (Elastic
+  File System), not EBS (Elastic Block Store).
+- **Why:** EBS volumes are attached to EC2 instance block devices. Fargate has no
+  underlying EC2 instance to attach to.
+- **EFS on Fargate:** You can mount EFS volumes using the Amazon EFS CSI driver.
+  EFS is network-attached, so it works with Fargate's pod-per-ENI model.
+- **Implication:** If you need local-disk-speed storage (databases, write-heavy
+  workloads), those workloads should run on EC2 node groups with EBS, not Fargate.
 
 ### IAM and Kubernetes Integration
 - **Learning:** OIDC provider creates a bridge between AWS IAM and Kubernetes RBAC
