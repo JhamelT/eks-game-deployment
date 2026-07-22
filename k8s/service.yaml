@@ -3,15 +3,21 @@ kind: Service
 metadata:
   namespace: game-2048
   name: service-2048
+
 spec:
   ports:
     - port: 80
       targetPort: 80
       protocol: TCP
-  # NodePort is required when using ALB target-type: ip with Fargate.
-  # The ALB routes directly to pod IPs, bypassing kube-proxy.
+
+  # AWS supports NodePort or LoadBalancer Services for this ALB ingress mode.
+  # This implementation uses NodePort.
+  #
+  # With target-type: ip, the ALB registers the Fargate pod IP addresses
+  # directly instead of registering EC2 worker nodes as instance targets.
   type: NodePort
-  # Selector MUST match the labels in deployment.yaml exactly.
-  # A mismatch here causes 503 errors from the ALB (no endpoints).
+
+  # This selector must match the labels in deployment.yaml exactly.
+  # A mismatch creates a Service with no endpoints and causes ALB 503 errors.
   selector:
     app.kubernetes.io/name: app-2048
