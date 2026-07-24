@@ -167,7 +167,7 @@ kubectl exec -it pod-name -n game-2048 -- nslookup kubernetes.default.svc.cluste
 
 ### Resource Utilization
 - **2048 Game App:** ~50m CPU, ~64Mi memory under light load
-- **Fargate Minimum:** 0.25 vCPU, 0.5 GB memory (smallest unit)
+- **Fargate sizing:** The application requests 0.25 vCPU and 512 MiB per container. EKS Fargate adds platform overhead before selecting a supported configuration, so the running pod may provision at a higher memory tier. The pod's `CapacityProvisioned` annotation is the final source of truth.
 - **Efficiency:** 20% CPU utilization, 12% memory utilization
 
 **Cost Optimization Learning:** Right-size applications to Fargate resource boundaries

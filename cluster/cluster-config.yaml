@@ -4,33 +4,43 @@ kind: ClusterConfig
 metadata:
   name: demo-cluster
   region: us-east-1
+
+  # Historical deployment configuration.
+  # Originally deployed in February 2026 when EKS 1.32 was in standard support.
+  # A new deployment should use a Kubernetes version currently in standard
+  # support and validate add-on compatibility before launch.
   version: "1.32"
 
-# Enable OIDC provider for IAM Roles for Service Accounts (IRSA)
+# Enable the cluster OIDC provider for IAM Roles for Service Accounts (IRSA).
 iam:
   withOIDC: true
 
 vpc:
-  # Single NAT Gateway reduces costs significantly for learning/dev environments.
-  # Default (HighlyAvailable) creates one NAT Gateway per AZ (2 total in us-east-1a/b),
-  # doubling the hourly base cost from ~$0.045/hr to ~$0.09/hr.
-  # For production, use HighlyAvailable to avoid cross-AZ traffic in a failure scenario.
+  # One NAT Gateway was selected to reduce fixed costs for this short-lived
+  # learning environment.
+  #
+  # Tradeoff: private workloads in both Availability Zones depend on one NAT
+  # Gateway. A production high-availability design would typically evaluate
+  # one NAT Gateway per AZ or private connectivity through VPC endpoints.
   nat:
     gateway: Single
 
-availabilityZones: ["us-east-1a", "us-east-1b"]
+availabilityZones:
+  - us-east-1a
+  - us-east-1b
 
 fargateProfiles:
-  # kube-system and default are required for the AWS Load Balancer Controller
-  # and core cluster components to run on Fargate
+  # kube-system supports system workloads such as CoreDNS and the AWS Load
+  # Balancer Controller. The default selector is retained to represent the
+  # original deployment configuration, although the game runs in game-2048.
   - name: fp-default
     selectors:
       - namespace: default
       - namespace: kube-system
 
-  # Dedicated profile for the 2048 game workload.
-  # Pods ONLY schedule to Fargate if their namespace matches a profile selector.
-  # This is why deploying to the wrong namespace causes Pending state.
+  # Dedicated profile for the 2048 workload.
+  # A pod must match a Fargate profile selector before EKS can schedule it
+  # onto Fargate. A namespace mismatch leaves the pod in Pending state.
   - name: alb-sample-app
     selectors:
       - namespace: game-2048
